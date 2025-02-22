@@ -1,0 +1,44 @@
+@startuml
+autonumber
+
+actor Operator
+participant "MES UI" as MES_UI
+participant "MES Service" as MES_Service
+participant "Cache" as Cache
+participant "MES DB" as MES_DB
+
+title Reading Orders & Updating Order Status (Write-Through)
+
+== Чтение списка заказов ==
+
+Operator -> MES_UI: Открыть «Список заказов»
+MES_UI -> MES_Service: GET /orders
+MES_Service -> Cache: Проверить, есть ли данные в кеше
+alt Данные найдены в кеше
+    Cache --> MES_Service: Возвращаем список заказов
+else Нет в кеше
+    MES_Service -> MES_DB: SELECT * FROM orders WHERE status IN (...)
+    MES_DB --> MES_Service: Результаты запроса
+    note right
+      Сохраняем результаты в кеш,
+      чтобы ускорить будущие запросы
+    end note
+    MES_Service -> Cache: Запись списка заказов (Write)
+    Cache --> MES_Service: ОК
+end
+MES_Service --> MES_UI: Список заказов
+MES_UI --> Operator: Отображаем список
+
+== Изменение статуса заказа (Write-Through) ==
+
+Operator -> MES_UI: Меняем статус заказа -> "MANUFACTURING_STARTED"
+MES_UI -> MES_Service: POST /orders/{id}/status
+MES_Service -> Cache: Записать статус "MANUFACTURING_STARTED"
+Cache --> MES_Service: Успешно
+MES_Service -> MES_DB: UPDATE orders SET status='MANUFACTURING_STARTED'
+MES_DB --> MES_Service: Успешно
+MES_Service --> MES_UI: Подтверждение смены статуса
+MES_UI --> Operator: Отобразить результат
+
+@enduml
+
